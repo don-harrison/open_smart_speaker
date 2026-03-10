@@ -14,7 +14,8 @@ extern unsigned long _estack;
 static void memory_copy(uint32_t *dest, const uint32_t *src, uint32_t *dest_end);
 static void memory_clear(uint32_t *dest, uint32_t *dest_end);
 
-void main();
+// Call the application's main() function.
+int main(void);
 
 __attribute__((section(".startup"), optimize("no-tree-loop-distribute-patterns"), naked))
 void startup()
@@ -31,9 +32,9 @@ void startup()
     memory_clear(&_sbss, &_ebss);
 
     // enable FPU
-    // SCB_CPACR = 0x00F00000;
+    SCB_CPACR = 0x00F00000;
 
-    // Call the `main()` function defined in `main.c`.
+    // Call the application's main() function.
     main();
 }
 

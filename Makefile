@@ -1,48 +1,98 @@
-CC = arm-none-eabi-gcc
-LD = arm-none-eabi-ld
-OBJCOPY = arm-none-eabi-objcopy
-OBJDUMP = arm-none-eabi-objdump
-SIZE = arm-none-eabi-size
-LOADER = teensy_loader_cli
+cmake_minimum_required(VERSION 3.20)
+project(teensy40_tflm C CXX ASM)
 
-OUTFILE = firmware
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-BUILD_DIR = ./build
-SRC_DIRS ?= ./src ./teensy ./include
+set(MCU_FLAGS
+    -mcpu=cortex-m7
+    -mthumb
+    -mfpu=fpv5-d16
+    -mfloat-abi=hard
+)
 
-SRCS := $(shell find $(SRC_DIRS) -name *.c -or -name *.s)
-OBJS := $(SRCS:%=$(BUILD_DIR)/%.o)
-DEPS := $(OBJS:.o=.d)
+set(COMMON_FLAGS
+    ${MCU_FLAGS}
+    -O2
+    -ffunction-sections
+    -fdata-sections
+    -fno-exceptions
+    -fno-rtti
+    -fno-threadsafe-statics
+    -fno-use-cxa-atexit
+    -fno-unwind-tables
+    -fno-asynchronous-unwind-tables
+    -Wall
+    -Wextra
+)
 
-INC_DIRS := $(shell find $(SRC_DIRS) -type d)
-INC_FLAGS := $(addprefix -I,$(INC_DIRS))
+add_compile_options(${COMMON_FLAGS})
 
-CFLAGS = -O3 -Wall -Werror -mcpu=cortex-m7 -mthumb $(INC_FLAGS)
-LDFLAGS = -Wl,--gc-sections,--print-gc-sections,--print-memory-usage -nostdlib -nostartfiles -Tteensy/imxrt1062.ld
+add_link_options(
+    ${MCU_FLAGS}
+    -T${CMAKE_SOURCE_DIR}/imxrt1062.ld
+    -nostdlib
+    -Wl,--gc-sections
+    -Wl,-Map=${CMAKE_BINARY_DIR}/firmware.map
+)
 
-$(BUILD_DIR)/$(OUTFILE).hex: $(BUILD_DIR)/$(OUTFILE).elf
-	@$(OBJCOPY) -O ihex -R .eeprom build/$(OUTFILE).elf build/$(OUTFILE).hex
-	@$(OBJDUMP) -d -x build/$(OUTFILE).elf > build/$(OUTFILE).dis
-	@$(OBJDUMP) -d -S -C build/$(OUTFILE).elf > build/$(OUTFILE).lst
-	@$(SIZE) build/$(OUTFILE).elf
+set(TFLM_DIR ${CMAKE_SOURCE_DIR}/third_party/tflite-micro)
 
-$(BUILD_DIR)/$(OUTFILE).elf: $(OBJS)
-	@$(CC) $(CFLAGS) -Xlinker -Map=build/$(OUTFILE).map $(LDFLAGS) -o $@ $^
+include_directories(
+    ${CMAKE_SOURCE_DIR}/src
+    ${TFLM_DIR}
+    ${TFLM_DIR}/tensorflow/lite/micro
+    ${TFLM_DIR}/tensorflow/lite/schema
+    ${TFLM_DIR}/tensorflow/lite/core/api
+    ${TFLM_DIR}/tensorflow
+)
 
-$(BUILD_DIR)/%.s.o: %.s
-	@$(MKDIR_P) $(dir $@)
-	@$(AS) $(ASFLAGS) -c $< -o $@
+set(APP_SOURCES
+    src/main.cpp
+    src/model_data.cc
+    src/syscalls.c
+    src/debug_log.cc
+    src/error_reporter_shim.cc
+    teensy/startup.c
+    teensy/bootdata.c
+)
 
-$(BUILD_DIR)/%.c.o: %.c
-	@$(MKDIR_P) $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+set(TFLM_SOURCES
+    ${TFLM_DIR}/tensorflow/lite/micro/micro_allocator.cc
+    ${TFLM_DIR}/tensorflow/lite/micro/micro_error_reporter.cc
+    ${TFLM_DIR}/tensorflow/lite/micro/micro_interpreter.cc
+    ${TFLM_DIR}/tensorflow/lite/micro/micro_mutable_op_resolver.cc
+    ${TFLM_DIR}/tensorflow/lite/micro/micro_resource_variables.cc
+    ${TFLM_DIR}/tensorflow/lite/micro/system_setup.cc
+    ${TFLM_DIR}/tensorflow/lite/micro/kernels/fully_connected.cc
+    ${TFLM_DIR}/tensorflow/lite/micro/kernels/quantize.cc
+    ${TFLM_DIR}/tensorflow/lite/micro/kernels/dequantize.cc
+    ${TFLM_DIR}/tensorflow/lite/micro/kernels/add.cc
+    ${TFLM_DIR}/tensorflow/lite/micro/kernels/mul.cc
+    ${TFLM_DIR}/tensorflow/lite/micro/kernels/reshape.cc
+    ${TFLM_DIR}/tensorflow/lite/micro/kernels/logistic.cc
+    ${TFLM_DIR}/tensorflow/lite/micro/kernels/softmax.cc
+)
 
-.PHONY: flash
-flash: $(BUILD_DIR)/$(OUTFILE).hex
-	$(LOADER) --mcu=TEENSY40 -w -v $<
+add_executable(firmware.elf
+    ${APP_SOURCES}
+    ${TFLM_SOURCES}
+)
 
-.PHONY: clean
-clean:
-	@$(RM) -r $(BUILD_DIR)
+target_include_directories(firmware.elf PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${TFLM_DIR}
+)
 
-MKDIR_P ?= mkdir -p
+target_link_libraries(firmware.elf
+    gcc
+    stdc++
+    m
+    c
+)
+
+add_custom_command(TARGET firmware.elf POST_BUILD
+    COMMAND arm-none-eabi-objcopy -O ihex $<TARGET_FILE:firmware.elf> ${CMAKE_BINARY_DIR}/firmware.hex
+    COMMAND arm-none-eabi-objcopy -O binary $<TARGET_FILE:firmware.elf> ${CMAKE_BINARY_DIR}/firmware.bin
+)
