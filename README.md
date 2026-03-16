@@ -6,6 +6,29 @@ the linker script chooses where RAM regions live and where the stack top symbol 
 
 the startup code loads that stack address into the CPU’s sp register before main() runs.
 
+install VS Code
+
+Setup WSL, in wsl 
+sudo apt update
+sudo apt install -y \
+  build-essential \
+  cmake \
+  make \
+  gcc-arm-none-eabi \
+  binutils-arm-none-eabi \
+  gdb-multiarch \
+  git
+
+git clone the repo
+
+
+Open the repo in the vscode
+
+Shift + Ctrl + P and type "reopen folder in WSL"
+
+this lets you open the project in WSL so you can use wsl to build and flash the project to the teensy 4.0
+
+Connect the teensy via usb
 press bootloader button on teensy
 then attach the busid in windows
 usbipd list
