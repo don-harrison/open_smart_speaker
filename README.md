@@ -21,22 +21,17 @@ sudo apt install -y \
 
 git clone the repo
 
-
 Open the repo in the vscode
 
 Shift + Ctrl + P and type "reopen folder in WSL"
 
 this lets you open the project in WSL so you can use wsl to build and flash the project to the teensy 4.0
 
-Connect the teensy via usb
-press bootloader button on teensy
-then attach the busid in windows
-usbipd list
-usbipd attach --wsl --busid 1-1
-
+To Create .cc file from a tflite model:
 xxd -i hello_world_float.tflite > m
 odel_data.cc
 
+Build project
 rm -rf build
 cmake -G "Unix Makefiles" \
   -DCMAKE_MAKE_PROGRAM=$(which make) \
@@ -44,7 +39,17 @@ cmake -G "Unix Makefiles" \
   -S . -B build
 cmake --build build --verbose
 
-checking versioning for header files
-grep -n "FLATBUFFERS_VERSION_" thirdparty/tflite-micro/tensorflow/lite/schema/schema_generated.h | head -10
+Since the device will be connected to windows by default, the flash command will hang waiting for the device to show up in wsl
 
+download usbipd for windows
+
+Connect the teensy via usb
+we need to connect the usb to wsl
+attach the busid id windows using cmd
+usbipd list
+usbipd attach --wsl --busid 1-1
+
+press bootloader button on teensy
+
+Flash to Teensy 4.0 over usb
 sudo teensy_loader_cli --mcu=TEENSY40 -w ./build/firmware.hex
